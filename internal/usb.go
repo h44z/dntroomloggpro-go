@@ -2,32 +2,39 @@ package internal
 
 import (
 	"errors"
+	"fmt"
+
+	"github.com/google/gousb/usbid"
 
 	"github.com/google/gousb"
-	"github.com/google/gousb/usbid"
 	"github.com/sirupsen/logrus"
 )
 
-type Roomlog struct {
+var (
+	MessageStart = []byte{0x7b}
+	MessageEnd   = []byte{0x40, 0x7d}
+)
+
+type UsbConnection struct {
 	// Only one context should be needed for an application.  It should always be closed.
-	usbOutEndpoint *gousb.OutEndpoint
-	usbInEndpoint  *gousb.InEndpoint
-	usbCtx         *gousb.Context
-	usbDev         *gousb.Device
-	usbIface       *gousb.Interface
-	usbConfig      *gousb.Config
+	outEndpoint *gousb.OutEndpoint
+	inEndpoint  *gousb.InEndpoint
+	ctx         *gousb.Context
+	dev         *gousb.Device
+	iface       *gousb.Interface
+	config      *gousb.Config
 }
 
-func NewRoomlog() *Roomlog {
-	r := &Roomlog{}
+func NewUsbConnection() *UsbConnection {
+	c := &UsbConnection{}
 
-	return r
+	return c
 }
 
-func (r *Roomlog) Open() error {
-	r.usbCtx = gousb.NewContext()
+func (c *UsbConnection) Open() error {
+	c.ctx = gousb.NewContext()
 
-	devs, err := r.usbCtx.OpenDevices(findRoomLoggDevice())
+	devs, err := c.ctx.OpenDevices(findUsbDevice())
 	if err != nil {
 		logrus.Errorf("Failed to open DNT RoomLogg PRO device: %v", err)
 		return err
@@ -41,121 +48,109 @@ func (r *Roomlog) Open() error {
 		return errors.New("found multiple DNT RoomLogg PRO devices, only one device is supported")
 	}
 
-	r.usbDev = devs[0]
-	err = r.usbDev.SetAutoDetach(true) // release kernel driver, we need the raw input
+	c.dev = devs[0]
+	err = c.dev.SetAutoDetach(true) // release kernel driver, we need the raw input
 	if err != nil {
 		logrus.Errorf("Failed to set autodetach on DNT RoomLogg PRO device: %v", err)
 		return err
 	}
 
-	cfgNum, err := r.usbDev.ActiveConfigNum()
+	cfgNum, err := c.dev.ActiveConfigNum()
 	if err != nil {
 		logrus.Errorf("Failed to get active default config number: %v", err)
 		return err
 	}
-	r.usbConfig, err = r.usbDev.Config(cfgNum)
+	c.config, err = c.dev.Config(cfgNum)
 	if err != nil {
-		logrus.Errorf("Failed to claim config %d of device %s: %v", cfgNum, r.usbDev, err)
+		logrus.Errorf("Failed to claim config %d of device %s: %v", cfgNum, c.dev, err)
 		return err
 	}
-	r.usbIface, err = r.usbConfig.Interface(0, 0)
+	c.iface, err = c.config.Interface(0, 0)
 	if err != nil {
-		logrus.Errorf("failed to select interface #%d alternate setting %d of config %d of device %s: %v", 0, 0, cfgNum, r.usbDev, err)
+		logrus.Errorf("Failed to select interface #%d alternate setting %d of config %d of device %s: %v", 0, 0, cfgNum, c.dev, err)
 		return err
 	}
 
 	// Open endpoints
-	inEndpointNr, outEndpointNr := getRoomLoggEndpoints(r.usbDev.Desc)
-	r.usbInEndpoint, err = r.usbIface.InEndpoint(inEndpointNr)
+	inEndpointNr, outEndpointNr := getUsbEndpoints(c.dev.Desc)
+	c.inEndpoint, err = c.iface.InEndpoint(inEndpointNr)
 	if err != nil {
-		logrus.Errorf("%s.InEndpoint(%d): %v", r.usbIface, r.usbInEndpoint, err)
+		logrus.Errorf("Failed to get in-endpoint: %v", err)
 		return err
 	}
 
-	r.usbOutEndpoint, err = r.usbIface.OutEndpoint(outEndpointNr)
+	c.outEndpoint, err = c.iface.OutEndpoint(outEndpointNr)
 	if err != nil {
-		logrus.Errorf("%s.OutEndpoint(%d): %v", r.usbIface, r.usbOutEndpoint, err)
+		logrus.Errorf("Failed to get out-endpoint: %v", err)
 		return err
 	}
 
 	return nil
 }
 
-func (r *Roomlog) Close() {
-	if r.usbIface != nil {
-		r.usbIface.Close()
+func (c *UsbConnection) Close() {
+	if c.iface != nil {
+		c.iface.Close()
 	}
-	if r.usbConfig != nil {
-		r.usbConfig.Close()
+	if c.config != nil {
+		c.config.Close()
 	}
-	if r.usbDev != nil {
-		r.usbDev.Close()
+	if c.dev != nil {
+		c.dev.Close()
 	}
-	if r.usbCtx != nil {
-		r.usbCtx.Close()
+	if c.ctx != nil {
+		c.ctx.Close()
 	}
 }
 
-func (r *Roomlog) FetchData() ([]Channel, error) {
-	// Request data, see: https://juergen.rocks/blog/articles/elv-raumklimastation-rs500-raspberry-pi-linux.html
-	// Also a good read: https://github.com/juergen-rocks/raumklima
-	outData := make([]byte, 64)
-	outData[0] = 0x7b
-	outData[1] = 0x03
-	outData[2] = 0x40
-	outData[3] = 0x7d
-
-	logrus.Tracef("Writing: %d bytes", len(outData))
-	writtenBytes, err := r.usbOutEndpoint.Write(outData)
-	if err != nil || writtenBytes != len(outData) {
-		logrus.Errorf("%s.Write([%d]): only %d bytes written, returned error is %v", r.usbOutEndpoint, len(outData), writtenBytes, err)
-		return nil, err
-	}
-	logrus.Tracef("Written data to device: %v", outData)
-
-	// Buffer large enough for 1 USB packets (64 bytes) from in-endpoint.
-	logrus.Tracef("Reading: %d bytes", r.usbInEndpoint.Desc.MaxPacketSize)
-	inData := make([]byte, r.usbInEndpoint.Desc.MaxPacketSize)
-	// readBytes might be smaller than the buffer size. readBytes might be greater than zero even if err is not nil.
-	readBytes, err := r.usbInEndpoint.Read(inData)
-	if err != nil {
-		logrus.Errorf("Read returned an error: %v", err)
-		return nil, err
-	}
-	logrus.Tracef("Read %d bytes: %v", readBytes, inData)
-
-	channels := make([]Channel, 0, 8)
-	tmpChannel := Channel{}
-	channelIndex := 0 // 0 indexed
-	channelByte := 0
-
-	for _, b := range inData[1:25] { // First byte is not used, each channelIndex uses 3 bytes, so 3*8 = 24 (+1 offset)
-		switch channelByte {
-		case 0:
-			tmpChannel = Channel{
-				Number: channelIndex + 1,
-			}
-			tmpChannel.rawTemp1 = b
-			channelByte++
-		case 1:
-			tmpChannel.rawTemp2 = b
-			channelByte++
-		case 2:
-			tmpChannel.rawHumidity = b
-			tmpChannel.calc()
-			// skip unused channels
-			if tmpChannel.rawHumidity != 0xff {
-				channels = append(channels, tmpChannel)
-			}
-			channelByte = 0
-			channelIndex++
+func (c *UsbConnection) rawRequest(body []byte, noResponse ...bool) ([]byte, error) {
+	lenBodyBytes := len(body)
+	lenPaddedBytes := c.outEndpoint.Desc.MaxPacketSize
+	// Apply padding
+	if lenBodyBytes < lenPaddedBytes {
+		lenPadding := lenPaddedBytes - lenBodyBytes
+		for i := 0; i < lenPadding; i++ {
+			body = append(body, 0)
 		}
 	}
 
-	return channels, nil
+	logrus.Tracef("Writing raw message: %d bytes, %d bytes with padding", lenBodyBytes, lenPaddedBytes)
+	numWrittenBytes, err := c.outEndpoint.Write(body)
+	if err != nil || numWrittenBytes != lenPaddedBytes {
+		logrus.Errorf("Failed to write raw bytes: %v. Written: %d bytes", err, numWrittenBytes)
+		return nil, fmt.Errorf("failed to write raw bytes: %v, written: %d bytes", err, numWrittenBytes)
+	}
+	logrus.Tracef("Written data to device: %d bytes", numWrittenBytes)
+
+	if noResponse != nil && len(noResponse) > 0 && noResponse[0] == true {
+		return nil, nil
+	}
+
+	// Buffer large enough for 1 USB packets (64 bytes) from in-endpoint.
+	logrus.Tracef("Reading raw message: %d bytes", c.inEndpoint.Desc.MaxPacketSize)
+	inData := make([]byte, c.inEndpoint.Desc.MaxPacketSize)
+	// numReadBytes might be smaller than the buffer size. numReadBytes might be greater than zero even if err is not nil.
+	numReadBytes, err := c.inEndpoint.Read(inData)
+	if err != nil {
+		logrus.Errorf("Failed to read raw bytes: %v", err)
+		return nil, fmt.Errorf("failed to read raw bytes: %v, read %d bytes", err, numReadBytes)
+	}
+	logrus.Tracef("Read %d bytes from device", numReadBytes)
+
+	return inData, nil
 }
 
-func getRoomLoggEndpoints(desc *gousb.DeviceDesc) (in int, out int) {
+func (c *UsbConnection) Request(command byte, payload []byte, noResponse ...bool) ([]byte, error) {
+	var body = make([]byte, 0, 4+len(payload)) // 4 for command and start/end bytes
+	body = append(body, MessageStart...)
+	body = append(body, command)
+	body = append(body, payload...)
+	body = append(body, MessageEnd...)
+
+	return c.rawRequest(body, noResponse...)
+}
+
+func getUsbEndpoints(desc *gousb.DeviceDesc) (in int, out int) {
 	for _, cfg := range desc.Configs { // There should only be one config
 		for _, intf := range cfg.Interfaces { // There should only be one interface
 			for _, ifSetting := range intf.AltSettings { // There should only be one alt-setting
@@ -173,7 +168,7 @@ func getRoomLoggEndpoints(desc *gousb.DeviceDesc) (in int, out int) {
 	return
 }
 
-func findRoomLoggDevice() func(desc *gousb.DeviceDesc) bool {
+func findUsbDevice() func(desc *gousb.DeviceDesc) bool {
 	return func(desc *gousb.DeviceDesc) bool {
 
 		// The usbid package can be used to print out human readable information.

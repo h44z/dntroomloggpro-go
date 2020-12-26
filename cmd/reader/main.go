@@ -32,7 +32,7 @@ func main() {
 
 		logrus.Infof("----------------------------------------")
 		for _, channel := range channelData {
-			logrus.Infof("Channel %d:\t %1.1f °C,\t %1.0f %%", channel.Number, channel.Temperature, channel.Humidity)
+			logrus.Infof("ChannelData %d:\t %1.1f °C,\t %1.0f %%", channel.Number, channel.Temperature, channel.Humidity)
 		}
 	}
 }
