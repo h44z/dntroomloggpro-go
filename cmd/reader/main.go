@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/h44z/dntroomloggpro-go/internal"
+	"github.com/h44z/dntroomloggpro-go/pkg"
 
 	"github.com/sirupsen/logrus"
 )
@@ -11,7 +11,7 @@ import (
 func main() {
 	//logrus.SetLevel(logrus.TraceLevel)
 
-	r := internal.NewRoomLogg()
+	r := pkg.NewRoomLogg()
 	if err := r.Open(); err != nil {
 		logrus.Fatal("Unable to initialize DNT RoomLogg PRO!")
 	}

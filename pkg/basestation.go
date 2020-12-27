@@ -1,17 +1,18 @@
-package internal
+package pkg
 
 import (
+	"github.com/h44z/dntroomloggpro-go/internal"
 	"github.com/sirupsen/logrus"
 )
 
 type RoomLogg struct {
 	// Only one context should be needed for an application.  It should always be closed.
-	usb *UsbConnection
+	usb *internal.UsbConnection
 }
 
 func NewRoomLogg() *RoomLogg {
 	r := &RoomLogg{}
-	r.usb = NewUsbConnection()
+	r.usb = internal.NewUsbConnection()
 
 	return r
 }
@@ -26,12 +27,12 @@ func (r *RoomLogg) Close() {
 
 func (r *RoomLogg) FetchCurrentData() ([]*ChannelData, error) { // Returns already calibrated data
 	dataBytes, err := r.usb.Request(CommandGetCurrentData, nil)
-	if err != nil || dataBytes[0] != MessageStart[0] {
+	if err != nil || dataBytes[0] != internal.MessageStart[0] {
 		logrus.Errorf("Failed to fetch current data: %v", err)
 		return nil, err
 	}
 
-	payload, err := GetMessagePayload(dataBytes)
+	payload, err := internal.GetMessagePayload(dataBytes)
 	if err != nil {
 		logrus.Errorf("Failed to validate message payload: %v", err)
 		return nil, err
@@ -42,12 +43,12 @@ func (r *RoomLogg) FetchCurrentData() ([]*ChannelData, error) { // Returns alrea
 
 func (r *RoomLogg) FetchCalibrationData() ([]*CalibrationData, error) {
 	dataBytes, err := r.usb.Request(CommandGetCalibration, nil)
-	if err != nil || dataBytes[0] != MessageStart[0] {
+	if err != nil || dataBytes[0] != internal.MessageStart[0] {
 		logrus.Errorf("Failed to fetch calibration data: %v", err)
 		return nil, err
 	}
 
-	payload, err := GetMessagePayload(dataBytes)
+	payload, err := internal.GetMessagePayload(dataBytes)
 	if err != nil {
 		logrus.Errorf("Failed to validate message payload: %v", err)
 		return nil, err
@@ -58,12 +59,12 @@ func (r *RoomLogg) FetchCalibrationData() ([]*CalibrationData, error) {
 
 func (r *RoomLogg) FetchIntervalMinutes() (IntervalData, error) {
 	dataBytes, err := r.usb.Request(CommandGetInterval, nil)
-	if err != nil || dataBytes[0] != MessageStart[0] {
+	if err != nil || dataBytes[0] != internal.MessageStart[0] {
 		logrus.Errorf("Failed to fetch interval data: %v", err)
 		return 0, err
 	}
 
-	payload, err := GetMessagePayload(dataBytes)
+	payload, err := internal.GetMessagePayload(dataBytes)
 	if err != nil {
 		logrus.Errorf("Failed to validate message payload: %v", err)
 		return 0, err
@@ -74,12 +75,12 @@ func (r *RoomLogg) FetchIntervalMinutes() (IntervalData, error) {
 
 func (r *RoomLogg) FetchSettings() (*SettingsData, error) {
 	dataBytes, err := r.usb.Request(CommandGetSettings, nil)
-	if err != nil || dataBytes[0] != MessageStart[0] {
+	if err != nil || dataBytes[0] != internal.MessageStart[0] {
 		logrus.Errorf("Failed to fetch settings data: %v", err)
 		return nil, err
 	}
 
-	payload, err := GetMessagePayload(dataBytes)
+	payload, err := internal.GetMessagePayload(dataBytes)
 	if err != nil {
 		logrus.Errorf("Failed to validate message payload: %v", err)
 		return nil, err
