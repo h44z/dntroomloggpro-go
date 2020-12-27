@@ -11,7 +11,7 @@ import (
 func main() {
 	//logrus.SetLevel(logrus.TraceLevel)
 
-	r := internal.NewRoomlog()
+	r := internal.NewRoomLogg()
 	if err := r.Open(); err != nil {
 		logrus.Fatal("Unable to initialize DNT RoomLogg PRO!")
 	}
@@ -20,7 +20,7 @@ func main() {
 	for {
 		time.Sleep(30 * time.Second)
 
-		channelData, err := r.FetchData()
+		channelData, err := r.FetchCurrentData()
 		if err != nil {
 			logrus.Errorf("Lost connection to DNT RoomLogg PRO: %v", err)
 			r.Close()

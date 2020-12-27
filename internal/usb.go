@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
@@ -182,4 +183,19 @@ func findUsbDevice() func(desc *gousb.DeviceDesc) bool {
 
 		return false
 	}
+}
+
+func GetMessagePayload(raw []byte) ([]byte, error) {
+	if raw == nil || len(raw) < 3 {
+		return nil, errors.New("invalid raw message size")
+	}
+
+	startIndex := 1 // First byte can be dismissed, its 0x7b (MessageStart)
+	endIndex := bytes.Index(raw, MessageEnd)
+
+	if endIndex == -1 {
+		return nil, errors.New("unable to find message end")
+	}
+
+	return raw[startIndex:endIndex], nil
 }
