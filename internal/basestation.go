@@ -24,7 +24,7 @@ func (r *RoomLogg) Close() {
 	r.usb.Close()
 }
 
-func (r *RoomLogg) FetchCurrentData() ([]*ChannelData, error) {
+func (r *RoomLogg) FetchCurrentData() ([]*ChannelData, error) { // Returns already calibrated data
 	dataBytes, err := r.usb.Request(CommandGetCurrentData, nil)
 	if err != nil || dataBytes[0] != MessageStart[0] {
 		logrus.Errorf("Failed to fetch current data: %v", err)
@@ -40,7 +40,7 @@ func (r *RoomLogg) FetchCurrentData() ([]*ChannelData, error) {
 	return NewChannelsData(payload), nil
 }
 
-func (r *RoomLogg) FetchCalibrationData() ([]*ChannelData, error) {
+func (r *RoomLogg) FetchCalibrationData() ([]*CalibrationData, error) {
 	dataBytes, err := r.usb.Request(CommandGetCalibration, nil)
 	if err != nil || dataBytes[0] != MessageStart[0] {
 		logrus.Errorf("Failed to fetch calibration data: %v", err)
@@ -53,7 +53,7 @@ func (r *RoomLogg) FetchCalibrationData() ([]*ChannelData, error) {
 		return nil, err
 	}
 
-	return NewChannelsData(payload), nil
+	return NewCalibrationsData(payload), nil
 }
 
 func (r *RoomLogg) FetchIntervalMinutes() (IntervalData, error) {

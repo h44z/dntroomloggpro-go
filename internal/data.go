@@ -13,11 +13,13 @@ type Flag uint8
 type Language uint8
 
 const (
-	LanguageDE Language = 0x01
-	LanguageEN Language = 0x00
+	LanguageDE Language = 0x00
+	LanguageEN Language = 0x01
 
-	DSTOn  Flag = 0x01
-	DSTOff Flag = 0x00
+	DSTOn    Flag = 0x01
+	DSTOff   Flag = 0x00
+	AlarmOn  Flag = 0x00
+	AlarmOff Flag = 0x01
 
 	TimeFormatEurope        TimeFormat = 0x00
 	TimeFormatEnglishPrefix TimeFormat = 0x01
@@ -278,8 +280,8 @@ func (d *SettingsData) RawBytes() []byte {
 }
 
 type AlarmSettingsData struct {
-	EnableTemperatureAlarm bool
-	EnableHumidityAlarm    bool
+	EnableTemperatureAlarm Flag
+	EnableHumidityAlarm    Flag
 
 	// Map index = channel number (0 based)
 	TemperatureLowAlarm  map[uint8]bool
@@ -289,11 +291,65 @@ type AlarmSettingsData struct {
 }
 
 func NewAlarmSettingsData(raw []byte) *AlarmSettingsData {
-	return &AlarmSettingsData{}
+	d := &AlarmSettingsData{}
+	d.EnableTemperatureAlarm = Flag(raw[0]) // 0x01 = off, 0x00 = on
+	d.EnableHumidityAlarm = Flag(raw[1])
+
+	// check remaining 4 bytes, first byte = hum high, second byte = hum low, third byte = tmp high, fourth byte = tmp low
+	// ch1 = bit 0, ch2 = bit 1, ch3 = bit 2, ... lowest bit is on the right
+	for i := 2; i < 6; i++ {
+		flags := make(map[uint8]bool, 8)
+		for b := uint8(0); b < 8; b++ {
+			flags[b] = hasBitSet8(raw[i], uint(b))
+		}
+
+		switch i {
+		case 2: // hum high flags
+			d.HumidityHighAlarm = flags
+		case 3: // hum low flags
+			d.HumidityLowAlarm = flags
+		case 4: // tmp high flags
+			d.TemperatureHighAlarm = flags
+		case 5: // tmp low flags
+			d.TemperatureLowAlarm = flags
+		}
+	}
+	return d
+}
+
+func setBit8(n uint8, pos uint) uint8 {
+	n |= 1 << pos
+	return n
+}
+
+func hasBitSet8(n uint8, pos uint) bool {
+	val := n & (1 << pos)
+	return val > 0
 }
 
 func (d *AlarmSettingsData) RawBytes() []byte {
-	r := make([]byte, 1)
+	r := make([]byte, 6)
+	r[0] = byte(d.EnableTemperatureAlarm)
+	r[1] = byte(d.EnableHumidityAlarm)
+	r[2] = byte(0)
+	r[3] = byte(0)
+	r[4] = byte(0)
+	r[5] = byte(0)
+
+	for i := uint8(0); i < 8; i++ {
+		if d.HumidityHighAlarm[i] {
+			r[2] = setBit8(r[2], uint(i))
+		}
+		if d.HumidityLowAlarm[i] {
+			r[3] = setBit8(r[3], uint(i))
+		}
+		if d.TemperatureHighAlarm[i] {
+			r[4] = setBit8(r[4], uint(i))
+		}
+		if d.TemperatureLowAlarm[i] {
+			r[5] = setBit8(r[5], uint(i))
+		}
+	}
 
 	return r
 }
@@ -305,16 +361,32 @@ type HumidityAlarmData struct {
 }
 
 func NewHumidityAlarmData(raw []byte) *HumidityAlarmData {
-	return &HumidityAlarmData{}
+	d := &HumidityAlarmData{}
+	d.High = float64(raw[0])
+	d.Low = float64(raw[1])
+
+	return d
 }
 
 func NewHumidityAlarmsData(raw []byte) []*HumidityAlarmData {
 	numChannels := len(raw) / 2 // 1 channel has 2 bytes
-	return make([]*HumidityAlarmData, 0, numChannels)
+
+	channels := make([]*HumidityAlarmData, 0, numChannels)
+	channelIndex := 1
+	for i := 0; i < 2*numChannels; i += 2 {
+		channel := NewHumidityAlarmData(raw[i : i+2])
+		channel.Channel = channelIndex
+		channels = append(channels, channel)
+		channelIndex++
+	}
+
+	return channels
 }
 
 func (d *HumidityAlarmData) RawBytes() []byte {
-	r := make([]byte, 1)
+	r := make([]byte, 2)
+	r[0] = byte(d.High)
+	r[1] = byte(d.Low)
 
 	return r
 }
@@ -326,16 +398,39 @@ type TemperatureAlarmData struct {
 }
 
 func NewTemperatureAlarmData(raw []byte) *TemperatureAlarmData {
-	return &TemperatureAlarmData{}
+	d := &TemperatureAlarmData{}
+	tmp := int16(binary.BigEndian.Uint16([]byte{raw[0], raw[1]}))
+	d.High = float64(tmp) / 10
+	tmp = int16(binary.BigEndian.Uint16([]byte{raw[2], raw[3]}))
+	d.Low = float64(tmp) / 10
+
+	return d
 }
 
 func NewTemperatureAlarmsData(raw []byte) []*TemperatureAlarmData {
 	numChannels := len(raw) / 4 // 1 channel has 4 bytes
-	return make([]*TemperatureAlarmData, 0, numChannels)
+
+	channels := make([]*TemperatureAlarmData, 0, numChannels)
+	channelIndex := 1
+	for i := 0; i < 4*numChannels; i += 4 {
+		channel := NewTemperatureAlarmData(raw[i : i+4])
+		channel.Channel = channelIndex
+		channels = append(channels, channel)
+		channelIndex++
+	}
+
+	return channels
 }
 
 func (d *TemperatureAlarmData) RawBytes() []byte {
-	r := make([]byte, 1)
+	r := make([]byte, 4)
+	tmp := make([]byte, 2)
+	binary.BigEndian.PutUint16(tmp, uint16(d.High*10))
+	r[0] = tmp[0]
+	r[1] = tmp[1]
+	binary.BigEndian.PutUint16(tmp, uint16(d.Low*10))
+	r[2] = tmp[0]
+	r[3] = tmp[1]
 
 	return r
 }
