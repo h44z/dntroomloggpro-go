@@ -27,12 +27,21 @@ func main() {
 	}
 	defer r.Close()
 
+	sCfg := pkg.NewServerConfig()
+	s, err := pkg.NewServerWithBaseStation(sCfg, r)
+	if err != nil {
+		logrus.Fatalf("Unable to initialize WebServer: %v", err)
+	}
+	defer s.Close()
+
+	go s.Run() // Run API server in background
+
 	iCfg := pkg.NewInfluxConfig()
 	i := pkg.NewInfluxLogger(iCfg)
 	defer i.Close()
 
 	for {
-		time.Sleep(30 * time.Second)
+		time.Sleep(time.Duration(iCfg.IntervalSeconds) * time.Second)
 
 		settings, err1 := r.FetchSettings()
 		channelData, err2 := r.FetchCurrentData()

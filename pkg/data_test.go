@@ -3,6 +3,7 @@ package pkg
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestNewChannelData(t *testing.T) {
@@ -1848,6 +1849,114 @@ func TestLanguageData_RawBytes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.d.RawBytes(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("RawBytes() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewTimeData(t *testing.T) {
+	l1 := time.FixedZone("UTC+1", +1*60*60)
+	t1, _ := time.Parse(time.RFC3339, "2020-12-28T15:43:23+01:00")
+	t1 = t1.In(l1)
+
+	l2 := time.FixedZone("UTC+6", +6*60*60)
+	t2, _ := time.Parse(time.RFC3339, "2016-12-17T00:39:12+06:00")
+	t2 = t2.In(l2)
+
+	l3 := time.FixedZone("UTC-5", -5*60*60)
+	t3, _ := time.Parse(time.RFC3339, "2016-12-17T00:39:12-05:00")
+	t3 = t3.In(l3)
+
+	type args struct {
+		raw []byte
+	}
+	tests := []struct {
+		name string
+		args args
+		want TimeData
+	}{
+		{
+			name: "Time1",
+			args: args{
+				raw: []byte{0x07, 0xe4, 0x0c, 0x1c, 0x0f, 0x2b, 0x17, 0x01},
+			},
+			want: TimeData{
+				time: t1,
+			},
+		},
+		{
+			name: "Time2",
+			args: args{
+				raw: []byte{0x07, 0xe0, 0x0c, 0x11, 0x00, 0x27, 0x0c, 0x06},
+			},
+			want: TimeData{
+				time: t2,
+			},
+		},
+		{
+			name: "Time3",
+			args: args{
+				raw: []byte{0x07, 0xe0, 0x0c, 0x11, 0x00, 0x27, 0x0c, 0xfb},
+			},
+			want: TimeData{
+				time: t3,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NewTimeData(tt.args.raw); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewTimeData() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTimeData_RawBytes(t *testing.T) {
+	l1 := time.FixedZone("UTC+1", +1*60*60)
+	t1, _ := time.Parse(time.RFC3339, "2020-12-28T15:43:23+01:00")
+	t1 = t1.In(l1)
+
+	l2 := time.FixedZone("UTC+6", +6*60*60)
+	t2, _ := time.Parse(time.RFC3339, "2016-12-17T00:39:12+06:00")
+	t2 = t2.In(l2)
+
+	l3 := time.FixedZone("UTC-5", -5*60*60)
+	t3, _ := time.Parse(time.RFC3339, "2016-12-17T00:39:12-05:00")
+	t3 = t3.In(l3)
+
+	tests := []struct {
+		name string
+		have TimeData
+		want []byte
+	}{
+		{
+			name: "Time1",
+			want: []byte{0x07, 0xe4, 0x0c, 0x1c, 0x0f, 0x2b, 0x17, 0x01},
+			have: TimeData{
+				time: t1,
+			},
+		},
+		{
+			name: "Time2",
+			want: []byte{0x07, 0xe0, 0x0c, 0x11, 0x00, 0x27, 0x0c, 0x06},
+			have: TimeData{
+				time: t2,
+			},
+		},
+		{
+			name: "Time3",
+			want: []byte{0x07, 0xe0, 0x0c, 0x11, 0x00, 0x27, 0x0c, 0xfb},
+			have: TimeData{
+				time: t3,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := tt.have
+			if got := d.RawBytes(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("RawBytes() = %v, want %v", got, tt.want)
 			}
 		})

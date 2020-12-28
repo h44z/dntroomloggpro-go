@@ -2,6 +2,8 @@ package pkg
 
 import (
 	"encoding/binary"
+	"fmt"
+	"time"
 )
 
 type TimeFormat uint8
@@ -18,8 +20,8 @@ const (
 
 	DSTOn    Flag = 0x01
 	DSTOff   Flag = 0x00
-	AlarmOn  Flag = 0x00
-	AlarmOff Flag = 0x01
+	AlarmOn  Flag = 0x01
+	AlarmOff Flag = 0x00
 
 	TimeFormatEurope        TimeFormat = 0x00
 	TimeFormatEnglishPrefix TimeFormat = 0x01
@@ -42,6 +44,8 @@ const (
 	UnitCelsius    Unit = 0x00
 	UnitFahrenheit Unit = 0x01
 
+	CommandGetSDCardFile       = 0x01
+	CommandGetExportFile       = 0x02
 	CommandGetAlarmSettings    = 0x06
 	CommandGetTemperatureAlarm = 0x08
 	CommandGetHumidityAlarm    = 0x09
@@ -472,6 +476,44 @@ func (d *CalibrationData) RawBytes() []byte {
 	binary.BigEndian.PutUint16(tmp, uint16(d.Temperature*10))
 	r[0] = tmp[0]
 	r[1] = tmp[1]
+
+	return r
+}
+
+type TimeData struct {
+	time time.Time
+}
+
+func NewTimeData(raw []byte) TimeData {
+	d := TimeData{}
+	year := int16(binary.BigEndian.Uint16([]byte{raw[0], raw[1]}))
+
+	offset := int8(raw[7]) // TODO: is this byte really the timezone??
+	sign := "+"
+	if offset < 0 {
+		sign = "" // neg sign will be added automatically
+	}
+	location := time.FixedZone(fmt.Sprintf("UTC%s%d", sign, offset), int(offset)*60*60)
+	d.time = time.Date(int(year), time.Month(raw[2]), int(raw[3]), int(raw[4]), int(raw[5]), int(raw[6]), 0, time.UTC)
+	d.time = d.time.Add(time.Duration(-offset) * time.Hour)
+	d.time = d.time.In(location)
+	return d
+}
+
+func (d *TimeData) RawBytes() []byte {
+	r := make([]byte, 8)
+
+	tmp := make([]byte, 2)
+	binary.BigEndian.PutUint16(tmp, uint16(d.time.Year()))
+	r[0] = tmp[0]
+	r[1] = tmp[1]
+	r[2] = byte(d.time.Month())
+	r[3] = byte(d.time.Day())
+	r[4] = byte(d.time.Hour())
+	r[5] = byte(d.time.Minute())
+	r[6] = byte(d.time.Second())
+	_, offset := d.time.Zone()
+	r[7] = byte(int8(offset / 60 / 60)) // TODO: is this byte really the timezone??
 
 	return r
 }
