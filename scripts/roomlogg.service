@@ -1,0 +1,19 @@
+[Unit]
+Description=RoomLogg Influx Logger
+ConditionPathExists=/opt/roomlogg/influxlogger
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+Restart=on-failure
+RestartSec=10
+
+WorkingDirectory=/opt/roomlogg
+ExecStart=/opt/roomlogg/influxlogger
+EnvironmentFile=/opt/roomlogg/roomlogg.env
+
+[Install]
+WantedBy=multi-user.target

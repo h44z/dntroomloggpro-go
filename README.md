@@ -13,7 +13,7 @@ make
 ## Installation and Usage
 In order to execute the compiled program without administrator rights, use the provided udev rule:
 ```shell
-sudo cp docs/99-hid.rules /etc/udev/rules.d/99-hid.rules
+sudo cp scripts/99-hid.rules /etc/udev/rules.d/99-hid.rules
 ```
 
 Now you can use the `reader` binary to read the stats from  the DNT RoomLogg PRO base station.
