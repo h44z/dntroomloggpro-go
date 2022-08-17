@@ -7,11 +7,17 @@ BINARIES=$(subst cmd/,,$(wildcard cmd/*))
 
 .PHONY: all test clean phony
 
-all: dep build
+all: dep
 
 build: dep $(addsuffix -amd64,$(addprefix $(BUILDDIR)/,$(BINARIES)))
 
-build-cross-plat: dep build $(addsuffix -arm,$(addprefix $(BUILDDIR)/,$(BINARIES))) $(addsuffix -arm64,$(addprefix $(BUILDDIR)/,$(BINARIES)))
+build-raspi:
+	docker build -t raspibuilder ./build
+	docker run -it --rm \
+      -v $(shell pwd):/build \
+      raspibuilder
+
+build-cross-plat: dep $(addsuffix -arm64,$(addprefix $(BUILDDIR)/,$(BINARIES)))
 
 dep:
 	$(GOCMD) mod download
@@ -40,10 +46,9 @@ clean:
 $(BUILDDIR)/%-amd64: cmd/%/main.go dep phony
 	GOOS=linux GOARCH=amd64 $(GOCMD) build -o $@ $<
 
-# On arch-linux install aarch64-linux-gnu-gcc to crosscompile for arm64
+# Execute in Docker container
 $(BUILDDIR)/%-arm64: cmd/%/main.go dep phony
-	CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 $(GOCMD) build -ldflags "-linkmode external -extldflags -static" -o $@ $<
-
-# On arch-linux install arm-linux-gnueabihf-gcc to crosscompile for arm
-$(BUILDDIR)/%-arm: cmd/%/main.go dep phony
-	CGO_ENABLED=1 CC=arm-linux-gnueabihf-gcc GOOS=linux GOARCH=arm GOARM=7 $(GOCMD) build -ldflags "-linkmode external -extldflags -static" -o $@ $<
+	CGO_ENABLED=1 PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig \
+	CC="zig cc -target aarch64-linux-gnu -isystem /usr/include -L/usr/lib/aarch64-linux-gnu" \
+	CXX="zig c++ -target aarch64-linux-gnu -isystem /usr/include -L/usr/lib/aarch64-linux-gnu" \
+	GOOS=linux GOARCH=arm64 $(GOCMD) build -ldflags " -s -w -linkmode external" -o $@ $<

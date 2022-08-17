@@ -7,7 +7,12 @@ Project inspired by https://juergen.rocks/blog/articles/elv-raumklimastation-rs5
 ## Setup
 Compile the go code using the provided Makefile:
 ```shell
-make
+# make sure that libusb-1.0 is installed!
+make build
+
+# build binaries for arm64 (raspberry pi), docker is required.
+# make sure that libusb-1.0 is installed on the raspberry pi
+make build-raspi
 ```
 
 ## Installation and Usage
