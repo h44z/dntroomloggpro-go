@@ -20,7 +20,7 @@ func NewInfluxConfig() *InfluxConfig {
 		UserName:        "influxuser",
 		Password:        "influxpass",
 		Bucket:          "roomlogg",
-		IntervalSeconds: 60,
+		IntervalSeconds: 91,
 	}
 	if err := loadConfigEnv(cfg); err != nil {
 		logrus.Warnf("unable to load environment config: %v", err)
@@ -45,7 +45,32 @@ func NewServerConfig() *ServerConfig {
 	return cfg
 }
 
-func loadConfigEnv(cfg interface{}) error {
+type MqttConfig struct {
+	Broker   string `envconfig:"MQTT_BROKER"`
+	Port     int    `envconfig:"MQTT_PORT"`
+	Username string `envconfig:"MQTT_USER"`
+	Password string `envconfig:"MQTT_PASS"`
+
+	Topic string `envconfig:"MQTT_TOPIC"`
+}
+
+func NewMqttConfig() *MqttConfig {
+	// Default config
+	cfg := &MqttConfig{
+		Broker:   "localhost",
+		Port:     1883,
+		Username: "mqttUser",
+		Password: "mqttPassword",
+		Topic:    "roomlogg",
+	}
+	if err := loadConfigEnv(cfg); err != nil {
+		logrus.Warnf("unable to load environment config: %v", err)
+	}
+
+	return cfg
+}
+
+func loadConfigEnv(cfg any) error {
 	err := envconfig.Process("", cfg)
 	if err != nil {
 		return err
