@@ -52,10 +52,11 @@ func NewMqttPublisherWithBaseStation(cfg *MqttConfig, station *RoomLogg) (*MqttP
 func (p *MqttPublisher) Setup(cfg *MqttConfig) error {
 	p.config = cfg
 	p.sensorInterval = 1 * time.Minute
-	p.configInterval = 10 * time.Minute
+	p.configInterval = 3 * time.Minute
 
 	opts := mqtt.NewClientOptions()
 	opts.SetKeepAlive(60 * time.Second)
+	opts.SetPingTimeout(2 * time.Second)
 	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", cfg.Broker, cfg.Port))
 	opts.SetClientID("roomlogg_mqtt")
 	if cfg.Username != "" {
@@ -64,9 +65,15 @@ func (p *MqttPublisher) Setup(cfg *MqttConfig) error {
 	if cfg.Password != "" {
 		opts.SetPassword(cfg.Password)
 	}
+	opts.SetDefaultPublishHandler(p.onMessageReceived)
 	opts.OnConnect = p.onConnectHandler
 	opts.OnConnectionLost = p.onConnectionLostHandler
 	p.client = mqtt.NewClient(opts)
+
+	if token := p.client.Connect(); token.Wait() && token.Error() != nil {
+		logrus.Errorf("Setup of mqtt publisher failed: %v!", token.Error())
+		panic(token.Error())
+	}
 
 	logrus.Infof("Setup of mqtt publisher completed!")
 	return nil
@@ -75,6 +82,11 @@ func (p *MqttPublisher) Setup(cfg *MqttConfig) error {
 func (p *MqttPublisher) Close() {
 	p.station.Close()
 	p.client.Disconnect(250)
+}
+
+func (p *MqttPublisher) onMessageReceived(client mqtt.Client, msg mqtt.Message) {
+	logrus.Infof("TOPIC: %s", msg.Topic())
+	logrus.Infof("MSG: %s", msg.Payload())
 }
 
 func (p *MqttPublisher) onConnectHandler(_ mqtt.Client) {
@@ -91,6 +103,7 @@ func (p *MqttPublisher) Run() {
 	if err := p.configTick(); err != nil {
 		logrus.Errorf("[MQTT] initial config tick failed: %v", err)
 	}
+	logrus.Info("[MQTT] initial config tick completed")
 
 	// Start ticker
 	tickerSensor := time.NewTicker(p.sensorInterval)
@@ -157,7 +170,7 @@ func (p *MqttPublisher) publishHomeAssistantConfig(channels []*ChannelData) erro
 		"device_class":       "connectivity",
 		"payload_on":         "online",
 		"payload_off":        "offline",
-		"expire_after":       "120",
+		"expire_after":       "240",
 		"unique_id":          fmt.Sprintf("roomlogg_%s_status", p.config.Topic),
 		"device": map[string]any{
 			"identifiers":  p.config.Topic,
