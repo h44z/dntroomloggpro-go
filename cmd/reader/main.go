@@ -11,7 +11,7 @@ import (
 func main() {
 	//logrus.SetLevel(logrus.TraceLevel)
 
-	r := pkg.NewRoomLogg()
+	r := pkg.NewRoomLogg(pkg.NewRoomLoggConfig())
 	if err := r.Open(); err != nil {
 		logrus.Fatal("Unable to initialize DNT RoomLogg PRO!")
 	}

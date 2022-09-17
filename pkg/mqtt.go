@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -13,36 +12,12 @@ import (
 
 type MqttPublisher struct {
 	// Core components
-	config  *MqttConfig
-	client  mqtt.Client
-	station *RoomLogg
-
-	configInterval time.Duration
-	sensorInterval time.Duration
+	config *MqttConfig
+	client mqtt.Client
 }
 
 func NewMqttPublisher(cfg *MqttConfig) (*MqttPublisher, error) {
 	p := &MqttPublisher{}
-
-	// Setup base station
-	p.station = NewRoomLogg()
-	if p.station == nil {
-		return nil, errors.New("failed to initialize RoomLogg PRO")
-	}
-	if err := p.station.Open(); err != nil {
-		return nil, errors.New("failed to initialize RoomLogg PRO, open failed")
-	}
-
-	err := p.Setup(cfg)
-
-	return p, err
-}
-
-func NewMqttPublisherWithBaseStation(cfg *MqttConfig, station *RoomLogg) (*MqttPublisher, error) {
-	p := &MqttPublisher{}
-
-	// Setup base station
-	p.station = station
 
 	err := p.Setup(cfg)
 
@@ -51,14 +26,12 @@ func NewMqttPublisherWithBaseStation(cfg *MqttConfig, station *RoomLogg) (*MqttP
 
 func (p *MqttPublisher) Setup(cfg *MqttConfig) error {
 	p.config = cfg
-	p.sensorInterval = 1 * time.Minute
-	p.configInterval = 3 * time.Minute
 
 	opts := mqtt.NewClientOptions()
 	opts.SetKeepAlive(60 * time.Second)
 	opts.SetPingTimeout(2 * time.Second)
 	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", cfg.Broker, cfg.Port))
-	opts.SetClientID("roomlogg_mqtt")
+	opts.SetClientID("gmc_mqtt")
 	if cfg.Username != "" {
 		opts.SetUsername(cfg.Username)
 	}
@@ -71,22 +44,21 @@ func (p *MqttPublisher) Setup(cfg *MqttConfig) error {
 	p.client = mqtt.NewClient(opts)
 
 	if token := p.client.Connect(); token.Wait() && token.Error() != nil {
-		logrus.Errorf("Setup of mqtt publisher failed: %v!", token.Error())
+		logrus.Errorf("[MQTT] Setup of mqtt publisher failed: %v!", token.Error())
 		panic(token.Error())
 	}
 
-	logrus.Infof("Setup of mqtt publisher completed!")
+	logrus.Infof("[MQTT] Setup of mqtt publisher completed!")
 	return nil
 }
 
 func (p *MqttPublisher) Close() {
-	p.station.Close()
 	p.client.Disconnect(250)
 }
 
 func (p *MqttPublisher) onMessageReceived(client mqtt.Client, msg mqtt.Message) {
-	logrus.Infof("TOPIC: %s", msg.Topic())
-	logrus.Infof("MSG: %s", msg.Payload())
+	logrus.Infof("[MQTT] TOPIC: %s", msg.Topic())
+	logrus.Infof("[MQTT] MSG: %s", msg.Payload())
 }
 
 func (p *MqttPublisher) onConnectHandler(_ mqtt.Client) {
@@ -97,67 +69,17 @@ func (p *MqttPublisher) onConnectionLostHandler(_ mqtt.Client, err error) {
 	logrus.Warnf("[MQTT] Connection to broker lost: %v!", err)
 }
 
-func (p *MqttPublisher) Run() {
-
-	// Initial tick
-	if err := p.configTick(); err != nil {
-		logrus.Errorf("[MQTT] initial config tick failed: %v", err)
-	}
-	logrus.Info("[MQTT] initial config tick completed")
-
-	// Start ticker
-	tickerSensor := time.NewTicker(p.sensorInterval)
-	tickerConfig := time.NewTicker(p.configInterval)
-	defer tickerSensor.Stop()
-	defer tickerConfig.Stop()
-	for {
-		select {
-		case <-tickerConfig.C:
-			if err := p.configTick(); err != nil {
-				logrus.Errorf("[MQTT] config tick failed: %v", err)
-			}
-		case <-tickerSensor.C:
-			if err := p.sensorTick(); err != nil {
-				logrus.Errorf("[MQTT] sensor tick failed: %v", err)
-			}
-		}
-	}
-}
-
-func (p *MqttPublisher) sensorTick() error {
-	online := true
-	data, err := p.station.FetchCurrentData()
-	if err != nil {
-		online = false
-		logrus.Errorf("[MQTT] Lost connection to DNT RoomLogg PRO: %v", err)
-		p.station.Close()
-		if err := p.station.Open(); err != nil {
-			logrus.Errorf("[MQTT] Failed to restore connection to DNT RoomLogg PRO: %v", err)
-		}
+func (p *MqttPublisher) Publish(settings *SettingsData, channels []*ChannelData, isOnline bool) error {
+	if err := p.publishHomeAssistantConfig(channels); err != nil {
+		return fmt.Errorf("failed to publish mqtt config: %w", err)
 	}
 
-	if err := p.publishTopics(data, online); err != nil {
-		return err
-	}
-	return nil
-}
+	time.Sleep(2 * time.Second) // wait for home assistant to process new topics
 
-func (p *MqttPublisher) configTick() error {
-	data, err := p.station.FetchCurrentData()
-	if err != nil {
-		logrus.Errorf("[MQTT] Lost connection to DNT RoomLogg PRO: %v", err)
-		p.station.Close()
-		if err := p.station.Open(); err != nil {
-			logrus.Errorf("[MQTT] Failed to restore connection to DNT RoomLogg PRO: %v", err)
-			return err
-		}
-
-		return errors.New("reconnect skip")
+	if err := p.publishTopics(channels, isOnline); err != nil {
+		return fmt.Errorf("failed to publish mqtt sensors: %w", err)
 	}
 
-	if err := p.publishHomeAssistantConfig(data); err != nil {
-		return err
-	}
 	return nil
 }
 

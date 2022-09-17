@@ -5,22 +5,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type InfluxConfig struct {
-	URL             string `envconfig:"INFLUX_URL"`
-	UserName        string `envconfig:"INFLUX_USER"`
-	Password        string `envconfig:"INFLUX_PASS"`
-	Bucket          string `envconfig:"INFLUX_BUCKET"`
-	IntervalSeconds int    `envconfig:"INFLUX_INTERVAL"`
+type RoomLoggConfig struct {
+	PollingRate int `envconfig:"POLLING_RATE"` // Seconds
 }
 
-func NewInfluxConfig() *InfluxConfig {
+func NewRoomLoggConfig() *RoomLoggConfig {
 	// Default config
-	cfg := &InfluxConfig{
-		URL:             "http://localhost:8086",
-		UserName:        "influxuser",
-		Password:        "influxpass",
-		Bucket:          "roomlogg",
-		IntervalSeconds: 91,
+	cfg := &RoomLoggConfig{
+		PollingRate: 60, // 1 Minute
 	}
 	if err := loadConfigEnv(cfg); err != nil {
 		logrus.Warnf("unable to load environment config: %v", err)
@@ -29,13 +21,35 @@ func NewInfluxConfig() *InfluxConfig {
 	return cfg
 }
 
-type ServerConfig struct {
+type InfluxConfig struct {
+	URL      string `envconfig:"INFLUX_URL"`
+	UserName string `envconfig:"INFLUX_USER"`
+	Password string `envconfig:"INFLUX_PASS"`
+	Bucket   string `envconfig:"INFLUX_BUCKET"`
+}
+
+func NewInfluxConfig() *InfluxConfig {
+	// Default config
+	cfg := &InfluxConfig{
+		URL:      "http://localhost:8086",
+		UserName: "influxuser",
+		Password: "influxpass",
+		Bucket:   "roomlogg",
+	}
+	if err := loadConfigEnv(cfg); err != nil {
+		logrus.Warnf("unable to load environment config: %v", err)
+	}
+
+	return cfg
+}
+
+type RestConfig struct {
 	ListenAddress string `envconfig:"RESTAPI_ADDRESS"`
 }
 
-func NewServerConfig() *ServerConfig {
+func NewRestConfig() *RestConfig {
 	// Default config
-	cfg := &ServerConfig{
+	cfg := &RestConfig{
 		ListenAddress: ":8080",
 	}
 	if err := loadConfigEnv(cfg); err != nil {

@@ -10,11 +10,12 @@ import (
 
 type RoomLogg struct {
 	// Only one context should be needed for an application.  It should always be closed.
+	cfg *RoomLoggConfig
 	usb *internal.UsbConnection
 }
 
-func NewRoomLogg() *RoomLogg {
-	r := &RoomLogg{}
+func NewRoomLogg(cfg *RoomLoggConfig) *RoomLogg {
+	r := &RoomLogg{cfg: cfg}
 	r.usb = internal.NewUsbConnection()
 
 	return r
@@ -26,6 +27,15 @@ func (r *RoomLogg) Open() error {
 
 func (r *RoomLogg) Close() {
 	r.usb.Close()
+}
+
+func (r *RoomLogg) Reconnect() error {
+	r.Close()
+	err := r.Open()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *RoomLogg) FetchCurrentData() ([]*ChannelData, error) { // Returns already calibrated data
