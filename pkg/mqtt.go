@@ -12,31 +12,31 @@ import (
 
 type MqttPublisher struct {
 	// Core components
-	config *MqttConfig
+	cfg    *MqttConfig
 	client mqtt.Client
 }
 
 func NewMqttPublisher(cfg *MqttConfig) (*MqttPublisher, error) {
-	p := &MqttPublisher{}
+	p := &MqttPublisher{
+		cfg: cfg,
+	}
 
-	err := p.Setup(cfg)
+	err := p.Setup()
 
 	return p, err
 }
 
-func (p *MqttPublisher) Setup(cfg *MqttConfig) error {
-	p.config = cfg
-
+func (p *MqttPublisher) Setup() error {
 	opts := mqtt.NewClientOptions()
 	opts.SetKeepAlive(60 * time.Second)
 	opts.SetPingTimeout(2 * time.Second)
-	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", cfg.Broker, cfg.Port))
-	opts.SetClientID("gmc_mqtt")
-	if cfg.Username != "" {
-		opts.SetUsername(cfg.Username)
+	opts.AddBroker(fmt.Sprintf("tcp://%s:%d", p.cfg.Broker, p.cfg.Port))
+	opts.SetClientID(fmt.Sprintf("roomlogg_mqtt_%s", p.cfg.Topic))
+	if p.cfg.Username != "" {
+		opts.SetUsername(p.cfg.Username)
 	}
-	if cfg.Password != "" {
-		opts.SetPassword(cfg.Password)
+	if p.cfg.Password != "" {
+		opts.SetPassword(p.cfg.Password)
 	}
 	opts.SetDefaultPublishHandler(p.onMessageReceived)
 	opts.OnConnect = p.onConnectHandler
@@ -84,19 +84,19 @@ func (p *MqttPublisher) Publish(settings *SettingsData, channels []*ChannelData,
 }
 
 func (p *MqttPublisher) publishHomeAssistantConfig(channels []*ChannelData) error {
-	topicStatus := fmt.Sprintf("homeassistant/binary_sensor/%s/status/config", p.config.Topic)
+	topicStatus := fmt.Sprintf("homeassistant/binary_sensor/%s/status/config", p.cfg.Topic)
 	availabilityConfig := map[string]any{
 		"name":               "Status",
-		"state_topic":        fmt.Sprintf("roomlogg/%s/status", p.config.Topic),
-		"availability_topic": fmt.Sprintf("roomlogg/%s/status", p.config.Topic),
+		"state_topic":        fmt.Sprintf("roomlogg/%s/status", p.cfg.Topic),
+		"availability_topic": fmt.Sprintf("roomlogg/%s/status", p.cfg.Topic),
 		"device_class":       "connectivity",
 		"payload_on":         "online",
 		"payload_off":        "offline",
 		"expire_after":       "240",
-		"unique_id":          fmt.Sprintf("roomlogg_%s_status", p.config.Topic),
+		"unique_id":          fmt.Sprintf("roomlogg_%s_status", p.cfg.Topic),
 		"device": map[string]any{
-			"identifiers":  p.config.Topic,
-			"name":         p.config.Topic,
+			"identifiers":  p.cfg.Topic,
+			"name":         p.cfg.Topic,
 			"manufacturer": "DNT",
 			"model":        "DNT RoomLogg PRO",
 		},
@@ -107,19 +107,19 @@ func (p *MqttPublisher) publishHomeAssistantConfig(channels []*ChannelData) erro
 	token.Wait()
 
 	for _, ch := range channels {
-		topicTemperature := fmt.Sprintf("homeassistant/sensor/%s/temperature_%d/config", p.config.Topic, ch.Number)
+		topicTemperature := fmt.Sprintf("homeassistant/sensor/%s/temperature_%d/config", p.cfg.Topic, ch.Number)
 		temperatureConfig := map[string]any{
 			"name":                fmt.Sprintf("Temperature Channel %d", ch.Number),
-			"state_topic":         fmt.Sprintf("roomlogg/%s/temperature/%d", p.config.Topic, ch.Number),
-			"availability_topic":  fmt.Sprintf("roomlogg/%s/status", p.config.Topic),
+			"state_topic":         fmt.Sprintf("roomlogg/%s/temperature/%d", p.cfg.Topic, ch.Number),
+			"availability_topic":  fmt.Sprintf("roomlogg/%s/status", p.cfg.Topic),
 			"unit_of_measurement": "°C",
 			"device_class":        "temperature",
 			"state_class":         "measurement",
 			"value_template":      "{{ value_json.value | float }}",
-			"unique_id":           fmt.Sprintf("roomlogg_%s_temp_%d", p.config.Topic, ch.Number),
+			"unique_id":           fmt.Sprintf("roomlogg_%s_temp_%d", p.cfg.Topic, ch.Number),
 			"device": map[string]any{
-				"identifiers":  p.config.Topic,
-				"name":         p.config.Topic,
+				"identifiers":  p.cfg.Topic,
+				"name":         p.cfg.Topic,
 				"manufacturer": "DNT",
 				"model":        "DNT RoomLogg PRO",
 			},
@@ -128,19 +128,19 @@ func (p *MqttPublisher) publishHomeAssistantConfig(channels []*ChannelData) erro
 		token = p.client.Publish(topicTemperature, 0, false, string(payload))
 		token.Wait()
 
-		topicHumidity := fmt.Sprintf("homeassistant/sensor/%s/humidity_%d/config", p.config.Topic, ch.Number)
+		topicHumidity := fmt.Sprintf("homeassistant/sensor/%s/humidity_%d/config", p.cfg.Topic, ch.Number)
 		humidityConfig := map[string]any{
 			"name":                fmt.Sprintf("Temperature Channel %d", ch.Number),
-			"state_topic":         fmt.Sprintf("roomlogg/%s/humidity/%d", p.config.Topic, ch.Number),
-			"availability_topic":  fmt.Sprintf("roomlogg/%s/status", p.config.Topic),
+			"state_topic":         fmt.Sprintf("roomlogg/%s/humidity/%d", p.cfg.Topic, ch.Number),
+			"availability_topic":  fmt.Sprintf("roomlogg/%s/status", p.cfg.Topic),
 			"unit_of_measurement": "%",
 			"device_class":        "humidity",
 			"state_class":         "measurement",
 			"value_template":      "{{ value_json.value | float }}",
-			"unique_id":           fmt.Sprintf("roomlogg_%s_humid_%d", p.config.Topic, ch.Number),
+			"unique_id":           fmt.Sprintf("roomlogg_%s_humid_%d", p.cfg.Topic, ch.Number),
 			"device": map[string]any{
-				"identifiers":  p.config.Topic,
-				"name":         p.config.Topic,
+				"identifiers":  p.cfg.Topic,
+				"name":         p.cfg.Topic,
 				"manufacturer": "DNT",
 				"model":        "DNT RoomLogg PRO",
 			},
@@ -153,7 +153,7 @@ func (p *MqttPublisher) publishHomeAssistantConfig(channels []*ChannelData) erro
 }
 
 func (p *MqttPublisher) publishTopics(channels []*ChannelData, isOnline bool) error {
-	topicStatus := fmt.Sprintf("roomlogg/%s/status", p.config.Topic)
+	topicStatus := fmt.Sprintf("roomlogg/%s/status", p.cfg.Topic)
 	status := "offline"
 	if isOnline {
 		status = "online"
@@ -162,7 +162,7 @@ func (p *MqttPublisher) publishTopics(channels []*ChannelData, isOnline bool) er
 	token.Wait()
 
 	for _, ch := range channels {
-		topicTemperature := fmt.Sprintf("roomlogg/%s/temperature/%d", p.config.Topic, ch.Number)
+		topicTemperature := fmt.Sprintf("roomlogg/%s/temperature/%d", p.cfg.Topic, ch.Number)
 		temperatureValue := map[string]any{
 			"value":   ch.Temperature,
 			"unit":    "°C",
@@ -172,7 +172,7 @@ func (p *MqttPublisher) publishTopics(channels []*ChannelData, isOnline bool) er
 		token = p.client.Publish(topicTemperature, 0, false, string(payload))
 		token.Wait()
 
-		topicHumidity := fmt.Sprintf("roomlogg/%s/humidity/%d", p.config.Topic, ch.Number)
+		topicHumidity := fmt.Sprintf("roomlogg/%s/humidity/%d", p.cfg.Topic, ch.Number)
 		humidityValue := map[string]any{
 			"value":   ch.Humidity,
 			"unit":    "%",
