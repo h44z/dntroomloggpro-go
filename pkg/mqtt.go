@@ -130,7 +130,7 @@ func (p *MqttPublisher) publishHomeAssistantConfig(channels []*ChannelData) erro
 
 		topicHumidity := fmt.Sprintf("homeassistant/sensor/%s/humidity_%d/config", p.cfg.Topic, ch.Number)
 		humidityConfig := map[string]any{
-			"name":                fmt.Sprintf("Temperature Channel %d", ch.Number),
+			"name":                fmt.Sprintf("Humidity Channel %d", ch.Number),
 			"state_topic":         fmt.Sprintf("roomlogg/%s/humidity/%d", p.cfg.Topic, ch.Number),
 			"availability_topic":  fmt.Sprintf("roomlogg/%s/status", p.cfg.Topic),
 			"unit_of_measurement": "%",
