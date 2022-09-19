@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/h44z/dntroomloggpro-go/pkg"
@@ -87,6 +89,12 @@ func main() {
 				_ = r.Reconnect()
 				isOnline = false
 			}
+
+			logMsg := make([]string, len(channelData))
+			for i, ch := range channelData {
+				logMsg[i] = fmt.Sprintf("CH %d: %0.1f°C/%0.0f% ", ch.Number, ch.Temperature, ch.Humidity)
+			}
+			logrus.Infof("[MAIN] Fetched: %s", strings.Join(logMsg, "; "))
 
 			for i, p := range publishers {
 				err := p.Publish(settings, channelData, isOnline)
