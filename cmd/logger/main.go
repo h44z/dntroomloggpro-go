@@ -92,7 +92,7 @@ func main() {
 
 			logMsg := make([]string, len(channelData))
 			for i, ch := range channelData {
-				logMsg[i] = fmt.Sprintf("CH %d: %0.1f°C/%0.0f% ", ch.Number, ch.Temperature, ch.Humidity)
+				logMsg[i] = fmt.Sprintf("CH %d: %0.1f°C/%0.0f%% ", ch.Number, ch.Temperature, ch.Humidity)
 			}
 			logrus.Infof("[MAIN] Fetched: %s", strings.Join(logMsg, "; "))
 
